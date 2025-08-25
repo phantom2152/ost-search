@@ -1,0 +1,40 @@
+---
+import '../styles/global.css';
+import SearchForm from '../components/SearchForm';
+import SubtitleList from '../components/SubtitleList';
+import SelectionSummary from '../components/SelectionSummary';
+import QuotaDisplay from '../components/QuotaDisplay';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>OpenSubtitles Search & Download</title>
+  </head>
+  <body>
+    <div class="min-h-screen bg-gray-50">
+      <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+          <h1 class="text-3xl font-bold text-gray-900 mb-2">
+            OpenSubtitles Search & Download
+          </h1>
+          <QuotaDisplay client:load />
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div class="lg:col-span-2 space-y-6">
+            <SearchForm client:load />
+            <SubtitleList client:load />
+          </div>
+
+          <div>
+            <SelectionSummary client:load />
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
