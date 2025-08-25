@@ -4,10 +4,13 @@ import type { DownloadRequest, DownloadResponse } from '../../types/download';
 import archiver from 'archiver';
 import { Readable } from 'stream';
 
+
+
 export const POST: APIRoute = async ({ request }) => {
   try {
     const apiKey = import.meta.env.OPENSUBTITLES_API_KEY;
     const appName = import.meta.env.OPENSUBTITLES_APP_NAME;
+    const downloadSecurityKey = import.meta.env.DOWNLOAD_SECURITY_KEY;
 
     if (!apiKey || !appName) {
       return new Response(
@@ -21,8 +24,50 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
+    if (!downloadSecurityKey) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Security configuration missing' 
+          }), 
+          { 
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
     const body: DownloadRequest = await request.json();
-    const { fileIds } = body;
+    const { fileIds,securityKey } = body;
+
+    if (!securityKey) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Security key is required' 
+          }), 
+          { 
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      if (securityKey !== downloadSecurityKey) {
+        console.warn('Invalid security key attempt:', { 
+          provided: securityKey.substring(0, 3) + '***',
+          timestamp: new Date().toISOString(),
+          ip: request.headers.get('x-forwarded-for') || 'unknown'
+        });
+        
+        return new Response(
+          JSON.stringify({ 
+            error: 'Invalid security key' 
+          }), 
+          { 
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+      }
 
     if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
       return new Response(
@@ -36,6 +81,8 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
+    console.log('Authorized download request for', fileIds.length, 'files');
+    
     const api = new OpenSubtitlesAPI(apiKey, appName);
     
     // Create a zip archive

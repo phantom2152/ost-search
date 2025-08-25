@@ -1,5 +1,6 @@
 export interface DownloadRequest {
     fileIds: number[];
+    securityKey: string;
   }
   
   export interface DownloadResponse {
@@ -17,3 +18,4 @@ export interface DownloadRequest {
     fileId?: number;
     details?: string;
   }
+

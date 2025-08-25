@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { EventBus, EVENTS } from '../utils/events';
 import { LocalStorage, type SelectedSubtitle } from '../utils/storage';
+import SecurityModal from './SecurityModal';
 
 const SelectionSummary: React.FC = () => {
   const [selectedSubtitles, setSelectedSubtitles] = useState<SelectedSubtitle[]>([]);
   const [downloading, setDownloading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
 
   useEffect(() => {
     // Load initial selection
@@ -35,13 +37,13 @@ const SelectionSummary: React.FC = () => {
     LocalStorage.removeSelectedSubtitle(fileId);
     const updated = LocalStorage.getSelectedSubtitles();
     setSelectedSubtitles(updated);
-  
+
     // Emit the removal event so SubtitleList can uncheck the checkbox
     EventBus.emit(EVENTS.SUBTITLE_REMOVED, {
       fileId,
       totalSelected: updated.length,
     });
-  
+
     EventBus.emit(EVENTS.SHOW_TOAST, {
       message: 'Subtitle removed from selection',
       type: 'info',
@@ -58,7 +60,7 @@ const SelectionSummary: React.FC = () => {
     });
   };
 
-  const handleDownloadAll = async () => {
+  const handleDownloadClick = () => {
     if (selectedSubtitles.length === 0) {
       EventBus.emit(EVENTS.SHOW_TOAST, {
         message: 'No subtitles selected',
@@ -66,7 +68,11 @@ const SelectionSummary: React.FC = () => {
       });
       return;
     }
-  
+
+    setShowSecurityModal(true);
+  };
+
+  const handleSecurityConfirm = async (securityKey: string) => {
     setDownloading(true);
     try {
       const fileIds = selectedSubtitles.map(s => s.file_id);
@@ -76,14 +82,17 @@ const SelectionSummary: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ fileIds }),
+        body: JSON.stringify({ 
+          fileIds,
+          securityKey 
+        }),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Download failed');
       }
-  
+
       // Get download results from headers
       const downloadResults = response.headers.get('X-Download-Results');
       let resultsInfo = null;
@@ -94,7 +103,7 @@ const SelectionSummary: React.FC = () => {
           console.warn('Could not parse download results');
         }
       }
-  
+
       // Create download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -105,7 +114,7 @@ const SelectionSummary: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-  
+
       // Update quota info if available
       if (resultsInfo?.quota) {
         const quotaInfo = {
@@ -115,7 +124,7 @@ const SelectionSummary: React.FC = () => {
         };
         LocalStorage.setQuotaInfo(quotaInfo);
       }
-  
+
       // Show success message
       const message = resultsInfo 
         ? `Downloaded ${resultsInfo.successful}/${resultsInfo.total} subtitles successfully`
@@ -125,7 +134,9 @@ const SelectionSummary: React.FC = () => {
         message,
         type: 'success',
       });
-  
+
+      setShowSecurityModal(false);
+
     } catch (error) {
       console.error('Download error:', error);
       EventBus.emit(EVENTS.SHOW_TOAST, {
@@ -137,89 +148,102 @@ const SelectionSummary: React.FC = () => {
     }
   };
 
+  const handleSecurityCancel = () => {
+    setShowSecurityModal(false);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        Selected Subtitles
-      </h2>
-      
-      <div className="mb-4">
-        <div className="text-2xl font-bold text-blue-600">
-          {selectedSubtitles.length}
-        </div>
-        <div className="text-sm text-gray-500">
-          subtitle{selectedSubtitles.length !== 1 ? 's' : ''} selected
-        </div>
-      </div>
-
-      {selectedSubtitles.length > 0 && (
+    <>
+      <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Selected Subtitles
+        </h2>
+        
         <div className="mb-4">
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none"
-          >
-            {showDetails ? 'Hide Details' : 'Show Details'}
-          </button>
-        </div>
-      )}
-
-      {showDetails && selectedSubtitles.length > 0 && (
-        <div className="mb-4 max-h-64 overflow-y-auto">
-          <div className="space-y-2">
-            {selectedSubtitles.map((subtitle) => (
-              <div key={subtitle.file_id} className="p-2 bg-gray-50 rounded text-xs">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 truncate">
-                      {subtitle.subtitle_info.title} ({subtitle.subtitle_info.year})
-                    </div>
-                    <div className="text-gray-600 truncate">
-                      {subtitle.file_name}
-                    </div>
-                    <div className="text-gray-500">
-                      {subtitle.subtitle_info.language} • CD {subtitle.cd_number}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveSubtitle(subtitle.file_id)}
-                    className="ml-2 text-red-500 hover:text-red-700 focus:outline-none"
-                    title="Remove from selection"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="text-2xl font-bold text-blue-600">
+            {selectedSubtitles.length}
+          </div>
+          <div className="text-sm text-gray-500">
+            subtitle{selectedSubtitles.length !== 1 ? 's' : ''} selected
           </div>
         </div>
-      )}
-      
-      <div className="space-y-3">
-        <button
-          onClick={handleDownloadAll}
-          disabled={selectedSubtitles.length === 0 || downloading}
-          className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {downloading ? 'Downloading...' : 'Download All'}
-        </button>
+
+        {selectedSubtitles.length > 0 && (
+          <div className="mb-4">
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none"
+            >
+              {showDetails ? 'Hide Details' : 'Show Details'}
+            </button>
+          </div>
+        )}
+
+        {showDetails && selectedSubtitles.length > 0 && (
+          <div className="mb-4 max-h-64 overflow-y-auto">
+            <div className="space-y-2">
+              {selectedSubtitles.map((subtitle) => (
+                <div key={subtitle.file_id} className="p-2 bg-gray-50 rounded text-xs">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate">
+                        {subtitle.subtitle_info.title} ({subtitle.subtitle_info.year})
+                      </div>
+                      <div className="text-gray-600 truncate">
+                        {subtitle.file_name}
+                      </div>
+                      <div className="text-gray-500">
+                        {subtitle.subtitle_info.language} • CD {subtitle.cd_number}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveSubtitle(subtitle.file_id)}
+                      className="ml-2 text-red-500 hover:text-red-700 focus:outline-none"
+                      title="Remove from selection"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
-        <button
-          onClick={handleClearSelection}
-          disabled={selectedSubtitles.length === 0}
-          className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Clear Selection
-        </button>
-      </div>
-      
-      {selectedSubtitles.length > 0 && (
-        <div className="mt-4 p-3 bg-blue-50 rounded-md">
-          <p className="text-xs text-blue-700">
-            Selected subtitles are saved locally and will persist across searches.
-          </p>
+        <div className="space-y-3">
+          <button
+            onClick={handleDownloadClick}
+            disabled={selectedSubtitles.length === 0 || downloading}
+            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {downloading ? 'Downloading...' : 'Download All'}
+          </button>
+          
+          <button
+            onClick={handleClearSelection}
+            disabled={selectedSubtitles.length === 0}
+            className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Clear Selection
+          </button>
         </div>
-      )}
-    </div>
+        
+        {selectedSubtitles.length > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-md">
+            <p className="text-xs text-blue-700">
+              Selected subtitles are saved locally and will persist across searches.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <SecurityModal
+        isOpen={showSecurityModal}
+        onClose={handleSecurityCancel}
+        onConfirm={handleSecurityConfirm}
+        loading={downloading}
+      />
+    </>
   );
 };
 
