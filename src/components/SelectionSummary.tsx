@@ -72,6 +72,31 @@ const SelectionSummary: React.FC = () => {
     setShowSecurityModal(true);
   };
 
+  // Helper function to extract filename from Content-Disposition header
+  const extractFilename = (contentDisposition: string): string => {
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (filenameMatch && filenameMatch[1]) {
+      // Remove quotes if present
+      return filenameMatch[1].replace(/['"]/g, '');
+    }
+    return 'download';
+  };
+
+  // Helper function to determine if response is a single file
+  const isSingleFile = (contentType: string): boolean => {
+    return contentType.includes('text/plain');
+  };
+
+  // Helper function to generate fallback filename
+  const generateFallbackFilename = (isZip: boolean, count: number): string => {
+    if (isZip) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      return `subtitles_${timestamp}.zip`;
+    } else {
+      return `subtitle_${Date.now()}.srt`;
+    }
+  };
+
   const handleSecurityConfirm = async (securityKey: string) => {
     setDownloading(true);
     try {
@@ -93,8 +118,12 @@ const SelectionSummary: React.FC = () => {
         throw new Error(errorData.error || 'Download failed');
       }
 
-      // Get download results from headers
+      // Get response headers
+      const contentType = response.headers.get('Content-Type') || '';
+      const contentDisposition = response.headers.get('Content-Disposition') || '';
       const downloadResults = response.headers.get('X-Download-Results');
+      
+      // Parse download results
       let resultsInfo = null;
       if (downloadResults) {
         try {
@@ -104,12 +133,22 @@ const SelectionSummary: React.FC = () => {
         }
       }
 
+      // Determine filename
+      let filename: string;
+      const isSingle = isSingleFile(contentType);
+      
+      if (contentDisposition) {
+        filename = extractFilename(contentDisposition);
+      } else {
+        filename = generateFallbackFilename(!isSingle, selectedSubtitles.length);
+      }
+
       // Create download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `subtitles_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -125,10 +164,19 @@ const SelectionSummary: React.FC = () => {
         LocalStorage.setQuotaInfo(quotaInfo);
       }
 
-      // Show success message
-      const message = resultsInfo 
-        ? `Downloaded ${resultsInfo.successful}/${resultsInfo.total} subtitles successfully`
-        : `Downloaded ${selectedSubtitles.length} subtitles`;
+      // Show appropriate success message
+      let message: string;
+      if (resultsInfo) {
+        if (isSingle && resultsInfo.successful === 1) {
+          message = `Subtitle downloaded successfully`;
+        } else {
+          message = `Downloaded ${resultsInfo.successful}/${resultsInfo.total} subtitles successfully`;
+        }
+      } else {
+        message = isSingle 
+          ? `Subtitle downloaded successfully`
+          : `Downloaded ${selectedSubtitles.length} subtitles`;
+      }
       
       EventBus.emit(EVENTS.SHOW_TOAST, {
         message,
