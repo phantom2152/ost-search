@@ -17,6 +17,6 @@ export default defineConfig({
   adapter: vercel(),
 
   server:{
-    allowedHosts: ["personality-brain-polymer-intensive.trycloudflare.com"]
+    allowedHosts: ["pictures-native-cultural-bikini.trycloudflare.com"]
   }
 });

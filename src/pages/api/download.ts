@@ -9,6 +9,7 @@ interface DownloadResult {
   fileName?: string;
   content?: string;
   error?: string;
+  quotaInfo?: QuotaInfo;
 }
 
 interface QuotaInfo {
@@ -81,6 +82,7 @@ async function downloadSubtitle(api: OpenSubtitlesAPI, fileId: number): Promise<
     
     const downloadResponse: DownloadResponse = await api.downloadSubtitle(fileId);
     
+    
     // Fetch the actual subtitle file content
     const subtitleResponse = await fetch(downloadResponse.link);
     if (!subtitleResponse.ok) {
@@ -100,6 +102,10 @@ async function downloadSubtitle(api: OpenSubtitlesAPI, fileId: number): Promise<
       success: true,
       fileName: safeFileName,
       content: subtitleContent,
+      quotaInfo: {
+        remaining: downloadResponse.remaining,
+        reset_time_utc: downloadResponse.reset_time_utc,
+      }
     };
 
   } catch (error) {
@@ -188,18 +194,9 @@ export const POST: APIRoute = async ({ request }) => {
       const result = await downloadSubtitle(api, fileId);
       downloadResults.push(result);
 
-      // Store quota info from the first successful download
-      if (!quotaInfo && result.success) {
-        try {
-          const downloadResponse: DownloadResponse = await api.downloadSubtitle(fileId);
-          quotaInfo = {
-            remaining: downloadResponse.remaining,
-            reset_time_utc: downloadResponse.reset_time_utc,
-          };
-        } catch (error) {
-          // Quota info is optional, continue without it
-          console.warn('Could not retrieve quota info:', error);
-        }
+      // Capture quota info from the first successful download
+      if (!quotaInfo && result.success && result.quotaInfo) {
+        quotaInfo = result.quotaInfo;
       }
     }
 
